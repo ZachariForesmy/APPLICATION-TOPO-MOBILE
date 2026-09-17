@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TopoMobile Pro — Topographie Professionnelle</title>
+  <meta name="description" content="Application topographique professionnelle pour géomètres et ingénieurs. Conversion UTM, calcul de superficie, carte OpenStreetMap.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    /* ================================================================== */
+    /* DESIGN SYSTEM — TopoMobile Pro                                     */
+    /* ================================================================== */
+    :root {
+      --surface: #0A1929;
+      --surface-variant: #132F4C;
+      --surface-elevated: #1A3A5C;
+      --primary: #1E88E5;
+      --primary-light: #64B5F6;
+      --primary-dark: #1565C0;
+      --secondary: #00BFA5;
+      --secondary-light: #5DF2D6;
+      --error: #FF5252;
+      --warning: #FFB74D;
+      --success: #66BB6A;
+      --info: #29B6F6;
+      --on-surface: #E3E8F0;
+      --on-surface-variant: #94A3B8;
+      --on-surface-disabled: #4A5568;
+      --border: #1E3A5F;
+      --glass-bg: rgba(255,255,255,0.06);
+      --glass-border: rgba(255,255,255,0.1);
+      --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --radius: 16px;
+      --radius-sm: 12px;
+      --radius-xs: 8px;
+      --shadow: 0 8px 32px rgba(0,0,0,0.3);
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-ui);
+      background: var(--surface);
+      color: var(--on-surface);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: linear-gradient(180deg, var(--surface) 0%, #0D2137 100%);
+      min-height: 100vh;
+    }
+
+    /* ================================================================== */
+    /* SPLASH SCREEN                                                       */
+    /* ================================================================== */
+    #splash {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: linear-gradient(180deg, var(--surface), #0D2137);
+      animation: splashFadeOut 0.5s ease-in 2.5s forwards;
+    }
+    #splash .logo-circle {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 40px rgba(30,136,229,0.4);
+      animation: splashPulse 1.5s ease-in-out infinite, splashScaleIn 1s ease-out;
+    }
+    #splash .logo-circle svg { width: 60px; height: 60px; fill: white; }
+    #splash h1 {
+      margin-top: 32px; font-size: 28px; font-weight: 700;
+      letter-spacing: -0.5px; color: white;
+      animation: splashFadeIn 1s ease-out 0.3s both;
+    }
+    #splash p {
+      margin-top: 8px; font-size: 14px; color: var(--on-surface-variant);
+      letter-spacing: 2px; text-transform: uppercase;
+      animation: splashFadeIn 1s ease-out 0.6s both;
+    }
+    #splash .spinner {
+      margin-top: 48px; width: 32px; height: 32px;
+      border: 2px solid rgba(30,136,229,0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite, splashFadeIn 1s ease-out 0.9s both;
+    }
+    @keyframes splashScaleIn { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes splashFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes splashFadeOut { to { opacity: 0; pointer-events: none; } }
+    @keyframes splashPulse { 0%, 100% { box-shadow: 0 0 40px rgba(30,136,229,0.4); } 50% { box-shadow: 0 0 60px rgba(30,136,229,0.6); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ================================================================== */
+    /* APP SHELL                                                           */
+    /* ================================================================== */
+    #app { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+
+    /* App Bar */
+    .app-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; background: var(--surface-elevated);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .app-bar h2 { font-size: 18px; font-weight: 600; }
+    .app-bar .back-btn {
+      background: none; border: none; color: var(--on-surface);
+      cursor: pointer; padding: 8px; border-radius: 8px;
+      display: flex; align-items: center; font-size: 14px; gap: 4px;
+      transition: var(--transition);
+    }
+    .app-bar .back-btn:hover { background: var(--surface-variant); }
+
+    /* Screens */
+    .screen { display: none; padding: 20px; animation: screenFadeIn 0.3s ease-out; }
+    .screen.active { display: block; }
+    @keyframes screenFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ================================================================== */
+    /* DASHBOARD                                                           */
+    /* ================================================================== */
+    .welcome { margin-bottom: 8px; }
+    .welcome h1 { font-size: 24px; font-weight: 700; }
+    .welcome .date { color: var(--on-surface-variant); font-size: 14px; margin-top: 4px; }
+
+    .feature-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px; margin-top: 28px;
+    }
+
+    .feature-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px; padding: 20px;
+      cursor: pointer; transition: var(--transition);
+      display: flex; flex-direction: column;
+      justify-content: space-between;
+      min-height: 150px;
+      position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle at top left, rgba(255,255,255,0.05), transparent 70%);
+      pointer-events: none;
+    }
+    .feature-card:hover { transform: scale(1.02); border-color: rgba(255,255,255,0.15); }
+    .feature-card:active { transform: scale(0.95); }
+    .feature-card .icon-wrap {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+    }
+    .feature-card .card-title { font-size: 16px; font-weight: 600; margin-top: 16px; }
+    .feature-card .card-sub { font-size: 12px; color: var(--on-surface-variant); margin-top: 2px; }
+
+    .info-bar {
+      margin-top: 28px; padding: 16px;
+      background: rgba(19,47,76,0.5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; color: var(--on-surface-variant);
+    }
+    .info-bar svg { flex-shrink: 0; fill: var(--primary); width: 20px; height: 20px; }
+
+    /* ================================================================== */
+    /* FORMS                                                               */
+    /* ================================================================== */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 500;
+      color: var(--on-surface-variant); margin-bottom: 6px;
+    }
+    .form-group input, .form-group select {
+      width: 100%; padding: 14px 16px;
+      background: var(--surface-variant);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--on-surface);
+      font-family: var(--font-mono);
+      font-size: 15px;
+      transition: var(--transition);
+      outline: none;
+    }
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(30,136,229,0.15);
+    }
+    .form-group input::placeholder { color: var(--on-surface-disabled); }
+    .form-group .input-row { display: flex; gap: 8px; }
+    .form-group .input-row input { flex: 1; }
+
+    /* Segment toggle */
+    .segment-toggle {
+      display: flex; background: var(--surface-variant);
+      border-radius: var(--radius-sm); overflow: hidden;
+      border: 1px solid var(--border); margin-bottom: 24px;
+    }
+    .segment-toggle button {
+      flex: 1; padding: 14px; background: none;
+      border: none; color: var(--on-surface-variant);
+      font-family: var(--font-ui); font-size: 14px;
+      font-weight: 600; cursor: pointer;
+      transition: var(--transition);
+    }
+    .segment-toggle button.active {
+      background: var(--primary); color: white;
+    }
+    .segment-toggle button:hover:not(.active) {
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* Hemisphere toggle */
+    .hemi-toggle {
+      display: flex; border-radius: var(--radius-xs);
+      overflow: hidden; border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .hemi-toggle button {
+      padding: 14px 16px; background: var(--surface-variant);
+      border: none; color: var(--on-surface-variant);
+      font-family: var(--font-mono); font-size: 14px;
+      cursor: pointer; transition: var(--transition);
+      min-width: 44px;
+    }
+    .hemi-toggle button.active { background: var(--primary); color: white; }
+
+    /* Primary button */
+    .btn-primary {
+      width: 100%; padding: 18px; margin-top: 8px;
+      background: var(--primary); color: white;
+      border: none; border-radius: var(--radius-sm);
+      font-family: var(--font-ui); font-size: 16px;
+      font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: var(--transition);
+      min-height: 56px;
+    }
+    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(30,136,229,0.4); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      width: 100%; padding: 16px; margin-top: 8px;
+      background: transparent; color: var(--primary);
+      border: 1.5px solid var(--primary); border-radius: var(--radius-sm);
+      font-family: var(--font-ui); font-size: 15px;
+      font-weight: 600; cursor: pointer;
+      transition: var(--transition);
+    }
+    .btn-secondary:hover { background: rgba(30,136,229,0.1); }
+
+    /* ================================================================== */
+    /* RESULT PANEL                                                        */
+    /* ================================================================== */
+    .result-panel {
+      margin-top: 24px; padding: 20px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      animation: resultSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes resultSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .result-panel .result-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .result-panel .result-header .check { color: var(--success); font-size: 18px; }
+    .result-panel .result-header h3 { font-size: 16px; font-weight: 600; }
+
+    .result-row {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 8px 0;
+    }
+    .result-row .label {
+      font-family: var(--font-mono); font-size: 12px;
+      color: var(--on-surface-variant);
+    }
+    .result-row .value-wrap { display: flex; align-items: center; gap: 8px; }
+    .result-row .value {
+      font-family: var(--font-mono); font-size: 15px;
+      color: white; font-weight: 500;
+    }
+    .result-row .copy-btn {
+      background: none; border: none;
+      color: var(--on-surface-variant); cursor: pointer;
+      padding: 6px; border-radius: 6px;
+      transition: var(--transition); font-size: 14px;
+    }
+    .result-row .copy-btn:hover { background: var(--surface-variant); color: var(--primary); }
+
+    .epsg-chip {
+      display: inline-block; padding: 4px 12px;
+      background: rgba(30,136,229,0.2);
+      color: var(--primary-light);
+      border-radius: 6px; font-family: var(--font-mono);
+      font-size: 13px; font-weight: 500;
+    }
+
+    /* Error banner */
+    .error-banner {
+      margin-top: 16px; padding: 14px 16px;
+      background: rgba(255,82,82,0.1);
+      border: 1px solid rgba(255,82,82,0.3);
+      border-radius: var(--radius-sm);
+      color: var(--error); font-size: 14px;
+      display: flex; align-items: flex-start; gap: 10px;
+      animation: resultSlideUp 0.3s ease-out;
+    }
+    .error-banner svg { flex-shrink: 0; width: 20px; height: 20px; fill: var(--error); margin-top: 1px; }
+
+    /* ================================================================== */
+    /* SURFACE / POINTS                                                    */
+    /* ================================================================== */
+    .point-card {
+      background: var(--surface-variant);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 12px;
+      transition: var(--transition);
+    }
+    .point-card:hover { border-color: var(--primary); }
+    .point-card .point-num {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(30,136,229,0.15);
+      color: var(--primary); font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .point-card .point-info { flex: 1; }
+    .point-card .point-name { font-weight: 600; font-size: 14px; }
+    .point-card .point-coords {
+      font-family: var(--font-mono); font-size: 12px;
+      color: var(--on-surface-variant); margin-top: 2px;
+    }
+    .point-card .delete-btn {
+      background: none; border: none;
+      color: var(--on-surface-disabled); cursor: pointer;
+      padding: 8px; border-radius: 8px; font-size: 16px;
+      transition: var(--transition);
+    }
+    .point-card .delete-btn:hover { color: var(--error); background: rgba(255,82,82,0.1); }
+
+    .empty-state {
+      text-align: center; padding: 40px 20px;
+      background: rgba(19,47,76,0.3);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+    }
+    .empty-state .empty-icon { font-size: 48px; opacity: 0.3; margin-bottom: 16px; }
+    .empty-state p { color: var(--on-surface-variant); font-size: 14px; }
+
+    /* Polygon canvas */
+    .polygon-canvas {
+      width: 100%; height: 280px; margin-top: 16px;
+      background: #0D1B2A; border-radius: var(--radius);
+      border: 1px solid var(--border); overflow: hidden;
+      transition: height 0.3s ease;
+    }
+    .polygon-canvas.expanded { height: 360px; }
+
+    /* CSV Import */
+    .csv-import-zone {
+      margin-top: 12px; padding: 20px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-sm);
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      background: rgba(19,47,76,0.2);
+      position: relative;
+    }
+    .csv-import-zone:hover,
+    .csv-import-zone.dragover {
+      border-color: var(--primary);
+      background: rgba(30,136,229,0.08);
+    }
+    .csv-import-zone .csv-icon {
+      font-size: 32px; margin-bottom: 8px; opacity: 0.5;
+    }
+    .csv-import-zone p {
+      font-size: 13px; color: var(--on-surface-variant);
+    }
+    .csv-import-zone .csv-formats {
+      font-size: 11px; color: var(--on-surface-disabled);
+      margin-top: 6px; font-family: var(--font-mono);
+    }
+    .csv-import-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0;
+      cursor: pointer; width: 100%; height: 100%;
+    }
+    .csv-file-info {
+      margin-top: 10px; padding: 12px 16px;
+      background: rgba(0,191,165,0.08);
+      border: 1px solid rgba(0,191,165,0.2);
+      border-radius: var(--radius-xs);
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--secondary-light);
+      animation: resultSlideUp 0.3s ease-out;
+    }
+    .csv-file-info .file-name { font-weight: 600; }
+    .csv-file-info .file-count {
+      margin-left: auto;
+      background: var(--secondary);
+      color: white;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* Live preview badge */
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(0,191,165,0.15);
+      color: var(--secondary);
+      padding: 4px 12px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .live-badge .live-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--secondary);
+      animation: livePulse 1.5s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    /* Import action buttons row */
+    .import-actions {
+      display: flex; gap: 8px; margin-top: 12px;
+    }
+    .import-actions button {
+      flex: 1;
+    }
+
+    /* Points counter */
+    .points-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .points-header .count {
+      font-size: 13px; color: var(--on-surface-variant);
+    }
+
+    /* ================================================================== */
+    /* MAP                                                                 */
+    /* ================================================================== */
+    #map-container {
+      width: 100%; height: calc(100vh - 60px);
+      border-radius: 0; position: relative;
+    }
+    .map-controls {
+      position: absolute; top: 16px; right: 16px; z-index: 500;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .map-ctrl-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: rgba(10,25,41,0.85); border: 1px solid var(--border);
+      color: white; font-size: 20px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .map-ctrl-btn:hover { background: var(--surface-elevated); border-color: var(--primary); }
+    .map-info-bar {
+      position: absolute; bottom: 16px; left: 16px; right: 16px; z-index: 500;
+      padding: 12px 16px; background: rgba(10,25,41,0.9);
+      border-radius: var(--radius-sm); border: 1px solid var(--border);
+      font-size: 13px; color: var(--on-surface-variant);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ================================================================== */
+    /* HISTORY                                                             */
+    /* ================================================================== */
+    .history-card {
+      background: var(--surface-variant);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 12px;
+      cursor: pointer; transition: var(--transition);
+    }
+    .history-card:hover { border-color: var(--primary); }
+    .history-card .hist-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: rgba(30,136,229,0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .history-card .hist-info { flex: 1; }
+    .history-card .hist-type { font-weight: 600; font-size: 14px; }
+    .history-card .hist-time { font-size: 12px; color: var(--on-surface-variant); margin-top: 2px; }
+
+    /* ================================================================== */
+    /* SETTINGS                                                            */
+    /* ================================================================== */
+    .settings-section { margin-bottom: 24px; }
+    .settings-section .section-title {
+      font-size: 12px; font-weight: 700;
+      color: var(--primary); letter-spacing: 1.5px;
+      text-transform: uppercase; margin-bottom: 12px;
+    }
+    .setting-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0; border-bottom: 1px solid var(--border);
+    }
+    .setting-item .setting-label { font-size: 15px; }
+    .setting-item .setting-value {
+      font-size: 14px; color: var(--on-surface-variant);
+      font-family: var(--font-mono);
+    }
+
+    /* ================================================================== */
+    /* GPS MODULE                                                          */
+    /* ================================================================== */
+    .gps-status-ring {
+      width: 180px; height: 180px; margin: 0 auto 24px;
+      border-radius: 50%; position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .gps-status-ring .ring-bg {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 4px solid var(--border);
+    }
+    .gps-status-ring .ring-progress {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 4px solid transparent;
+      border-top-color: var(--on-surface-disabled);
+      transition: all 0.5s ease;
+    }
+    .gps-status-ring.searching .ring-progress {
+      border-top-color: var(--warning);
+      animation: spin 1.2s linear infinite;
+    }
+    .gps-status-ring.locked .ring-progress {
+      border-color: var(--secondary);
+      animation: none;
+    }
+    .gps-status-ring.error .ring-progress {
+      border-color: var(--error);
+      animation: none;
+    }
+    .gps-status-ring .ring-inner {
+      text-align: center; z-index: 1;
+    }
+    .gps-status-ring .ring-icon {
+      font-size: 36px; margin-bottom: 4px;
+    }
+    .gps-status-ring .ring-label {
+      font-size: 13px; font-weight: 600;
+      color: var(--on-surface-variant);
+    }
+    .gps-status-ring .ring-accuracy {
+      font-size: 20px; font-weight: 700;
+      font-family: var(--font-mono);
+    }
+    .gps-status-ring.searching .ring-accuracy { color: var(--warning); }
+    .gps-status-ring.locked .ring-accuracy { color: var(--secondary); }
+    .gps-status-ring.error .ring-accuracy { color: var(--error); }
+
+    .gps-accuracy-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px;
+      padding: 10px 16px;
+      background: var(--surface-variant);
+      border-radius: var(--radius-xs);
+      border: 1px solid var(--border);
+    }
+    .gps-accuracy-bar .bar-track {
+      flex: 1; height: 6px;
+      background: var(--border);
+      border-radius: 3px; overflow: hidden;
+    }
+    .gps-accuracy-bar .bar-fill {
+      height: 100%; border-radius: 3px;
+      transition: width 0.5s ease, background 0.3s;
+    }
+    .gps-accuracy-bar .bar-label {
+      font-size: 11px; font-weight: 600;
+      white-space: nowrap; min-width: 70px; text-align: right;
+    }
+
+    .gps-coord-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius); padding: 16px;
+      margin-bottom: 12px;
+    }
+    .gps-coord-card .coord-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .gps-coord-card .coord-type {
+      font-size: 11px; font-weight: 700;
+      color: var(--primary); text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .gps-coord-card .coord-row {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 5px 0;
+    }
+    .gps-coord-card .coord-label {
+      font-size: 12px; color: var(--on-surface-variant);
+      font-family: var(--font-mono);
+    }
+    .gps-coord-card .coord-value {
+      font-size: 15px; font-weight: 500;
+      font-family: var(--font-mono); color: white;
+    }
+    .gps-coord-card .coord-value.altitude {
+      color: var(--warning);
+    }
+
+    .gps-btn-row {
+      display: flex; gap: 10px; margin-top: 20px; margin-bottom: 16px;
+    }
+    .gps-btn-row button { flex: 1; }
+
+    .gps-saved-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 24px; margin-bottom: 12px;
+    }
+    .gps-saved-header .saved-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--on-surface-variant);
+    }
+    .gps-saved-header .saved-count {
+      font-size: 12px; color: var(--on-surface-disabled);
+    }
+
+    .gps-point-card {
+      background: var(--surface-variant);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px; margin-bottom: 8px;
+      animation: resultSlideUp 0.3s ease-out;
+    }
+    .gps-point-card .gp-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .gps-point-card .gp-name {
+      font-weight: 600; font-size: 14px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .gps-point-card .gp-time {
+      font-size: 11px; color: var(--on-surface-disabled);
+    }
+    .gps-point-card .gp-coords {
+      font-family: var(--font-mono); font-size: 12px;
+      color: var(--on-surface-variant);
+      line-height: 1.6;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--surface-variant); color: var(--on-surface);
+      padding: 12px 24px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); font-size: 14px;
+      box-shadow: var(--shadow); z-index: 2000;
+      animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2s forwards;
+    }
+    @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes toastOut { to { opacity: 0; transform: translate(-50%, 20px); } }
+
+    /* Section labels */
+    .section-label {
+      font-size: 13px; font-weight: 500;
+      color: var(--on-surface-variant);
+      margin-bottom: 8px; margin-top: 16px;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================== -->
+<!-- SPLASH SCREEN                                                    -->
+<!-- ============================================================== -->
+<div id="splash">
+  <div class="logo-circle">
+    <svg viewBox="0 0 24 24"><path d="M14,6l-3.75,5 2.85,3.8-1.6,1.2C9.81,13.75 7,10 7,10l-6,8h22L14,6z"/></svg>
+  </div>
+  <h1>TopoMobile Pro</h1>
+  <p>Topographie Professionnelle</p>
+  <div class="spinner"></div>
+</div>
+
+<!-- ============================================================== -->
+<!-- APPLICATION                                                      -->
+<!-- ============================================================== -->
+<div id="app">
+
+  <!-- ======== DASHBOARD ======== -->
+  <div id="screen-dashboard" class="screen active">
+    <div class="welcome">
+      <h1>TopoMobile Pro</h1>
+      <div class="date" id="current-date"></div>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card" onclick="navigateTo('converter')" id="card-converter">
+        <div class="icon-wrap" style="background:rgba(30,136,229,0.15)">📐</div>
+        <div>
+          <div class="card-title">Conversion</div>
+          <div class="card-sub">UTM ↔ Lat/Lon</div>
+        </div>
+      </div>
+      <div class="feature-card" onclick="navigateTo('surface')" id="card-surface">
+        <div class="icon-wrap" style="background:rgba(0,191,165,0.15)">📏</div>
+        <div>
+          <div class="card-title">Superficie</div>
+          <div class="card-sub">Calcul de surface</div>
+        </div>
+      </div>
+      <div class="feature-card" onclick="navigateTo('gps')" id="card-gps">
+        <div class="icon-wrap" style="background:rgba(124,77,255,0.15)">📍</div>
+        <div>
+          <div class="card-title">GPS</div>
+          <div class="card-sub">Position temps réel</div>
+        </div>
+      </div>
+      <div class="feature-card" onclick="navigateTo('map')" id="card-map">
+        <div class="icon-wrap" style="background:rgba(255,109,0,0.15)">🗺️</div>
+        <div>
+          <div class="card-title">Carte</div>
+          <div class="card-sub">OpenStreetMap</div>
+        </div>
+      </div>
+      <div class="feature-card" onclick="navigateTo('history')" id="card-history">
+        <div class="icon-wrap" style="background:rgba(236,64,122,0.15)">📋</div>
+        <div>
+          <div class="card-title">Historique</div>
+          <div class="card-sub">Conversions sauvegardées</div>
+        </div>
+      </div>
+      <div class="feature-card" onclick="navigateTo('settings')" id="card-settings">
+        <div class="icon-wrap" style="background:rgba(148,163,184,0.15)">⚙️</div>
+        <div>
+          <div class="card-title">Paramètres</div>
+          <div class="card-sub">Configuration</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-bar">
+      <svg viewBox="0 0 24 24"><path d="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10-4.48 10-10S17.52,2 12,2zm1,15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+      <span>Tous les calculs fonctionnent hors connexion</span>
+    </div>
+  </div>
+
+  <!-- ======== CONVERTER ======== -->
+  <div id="screen-converter" class="screen">
+    <div class="app-bar">
+      <button class="back-btn" onclick="navigateTo('dashboard')">← Retour</button>
+      <h2>Conversion</h2>
+      <button class="back-btn" onclick="resetConverter()">↻</button>
+    </div>
+
+    <div style="padding:20px;">
+      <div class="segment-toggle">
+        <button class="active" onclick="setConverterMode('dd', this)">DD</button>
+        <button onclick="setConverterMode('dms', this)">DMS</button>
+        <button onclick="setConverterMode('utm', this)">UTM</button>
+      </div>
+
+      <!-- DD Form -->
+      <div id="form-dd">
+        <div class="form-group">
+          <label>Latitude (°)</label>
+          <input type="number" id="dd-lat" placeholder="Ex: 48.856600" step="any">
+        </div>
+        <div class="form-group">
+          <label>Longitude (°)</label>
+          <input type="number" id="dd-lon" placeholder="Ex: 2.352200" step="any">
+        </div>
+      </div>
+
+      <!-- DMS Form -->
+      <div id="form-dms" style="display:none">
+        <div class="section-label">Latitude</div>
+        <div class="form-group">
+          <div class="input-row">
+            <input type="number" id="dms-lat-d" placeholder="Deg" min="0" max="90">
+            <input type="number" id="dms-lat-m" placeholder="Min" min="0" max="59">
+            <input type="number" id="dms-lat-s" placeholder="Sec" step="any">
+            <div class="hemi-toggle">
+              <button class="active" onclick="setHemi(this,'N','dms-lat-h')">N</button>
+              <button onclick="setHemi(this,'S','dms-lat-h')">S</button>
+            </div>
+            <input type="hidden" id="dms-lat-h" value="N">
+          </div>
+        </div>
+        <div class="section-label">Longitude</div>
+        <div class="form-group">
+          <div class="input-row">
+            <input type="number" id="dms-lon-d" placeholder="Deg" min="0" max="180">
+            <input type="number" id="dms-lon-m" placeholder="Min" min="0" max="59">
+            <input type="number" id="dms-lon-s" placeholder="Sec" step="any">
+            <div class="hemi-toggle">
+              <button class="active" onclick="setHemi(this,'E','dms-lon-h')">E</button>
+              <button onclick="setHemi(this,'W','dms-lon-h')">W</button>
+            </div>
+            <input type="hidden" id="dms-lon-h" value="E">
+          </div>
+        </div>
+      </div>
+
+      <!-- UTM Form (inverse) -->
+      <div id="form-utm" style="display:none">
+        <div class="form-group">
+          <label>Easting (m)</label>
+          <input type="number" id="utm-e" placeholder="Ex: 448251.800" step="any">
+        </div>
+        <div class="form-group">
+          <label>Northing (m)</label>
+          <input type="number" id="utm-n" placeholder="Ex: 5411943.620" step="any">
+        </div>
+        <div class="form-group">
+          <div class="input-row">
+            <div style="flex:2">
+              <label>Zone (1-60)</label>
+              <input type="number" id="utm-z" placeholder="31" min="1" max="60">
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column;">
+              <label>Hémisp.</label>
+              <div class="hemi-toggle" style="margin-top:auto;">
+                <button class="active" onclick="setHemi(this,'N','utm-h')">N</button>
+                <button onclick="setHemi(this,'S','utm-h')">S</button>
+              </div>
+              <input type="hidden" id="utm-h" value="N">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary" onclick="convert()" id="btn-convert">
+        <span>⟷</span> CONVERTIR
+      </button>
+
+      <div id="converter-error"></div>
+      <div id="converter-result"></div>
+    </div>
+  </div>
+
+  <!-- ======== SURFACE ======== -->
+  <div id="screen-surface" class="screen">
+    <div class="app-bar">
+      <button class="back-btn" onclick="navigateTo('dashboard')">← Retour</button>
+      <h2>Superficie</h2>
+      <button class="back-btn" onclick="clearSurfacePoints()">🗑</button>
+    </div>
+
+    <div style="padding:20px;">
+      <!-- CSV Import Zone -->
+      <div class="csv-import-zone" id="csv-drop-zone">
+        <input type="file" id="csv-file-input" accept=".csv,.txt,.tsv" onchange="handleCSVFile(this.files[0])">
+        <div class="csv-icon">📄</div>
+        <p><strong>Importer un fichier CSV</strong></p>
+        <p>Glissez-déposez ou cliquez pour sélectionner</p>
+        <div class="csv-formats">Formats: Nom;E;N · E;N;Nom · E;N<br>Séparateurs: ; , tabulation</div>
+      </div>
+      <div id="csv-file-info"></div>
+
+      <!-- Action buttons -->
+      <div class="import-actions">
+        <button class="btn-secondary" onclick="showAddPointDialog()">
+          + Point manuel
+        </button>
+        <button class="btn-secondary" onclick="loadSampleCSV()">
+          📋 Exemple CSV
+        </button>
+      </div>
+
+      <!-- Live preview canvas (always visible, updates in real time) -->
+      <div style="margin-top:20px; display:flex; align-items:center; justify-content:space-between;">
+        <span class="section-label" style="margin:0">Aperçu du polygone</span>
+        <span class="live-badge" id="live-badge" style="display:none">
+          <span class="live-dot"></span> EN DIRECT
+        </span>
+      </div>
+      <canvas id="polygon-canvas" class="polygon-canvas"></canvas>
+
+      <!-- Points header -->
+      <div class="points-header" id="points-header" style="display:none; margin-top:20px;">
+        <span class="section-label" style="margin:0">Points du polygone</span>
+        <span class="count" id="points-count">0 points</span>
+      </div>
+
+      <div id="surface-points"></div>
+      <div id="surface-empty" style="display:none"></div>
+
+      <div id="surface-result"></div>
+    </div>
+  </div>
+
+  <!-- ======== MAP ======== -->
+  <div id="screen-map" class="screen">
+    <div class="app-bar">
+      <button class="back-btn" onclick="navigateTo('dashboard')">← Retour</button>
+      <h2>Carte</h2>
+      <div></div>
+    </div>
+    <div id="map-container"></div>
+  </div>
+
+  <!-- ======== GPS MODULE ======== -->
+  <div id="screen-gps" class="screen">
+    <div class="app-bar">
+      <button class="back-btn" onclick="stopGPSTracking(); navigateTo('dashboard')">← Retour</button>
+      <h2>GPS Terrain</h2>
+      <div></div>
+    </div>
+
+    <div style="padding:20px;">
+      <!-- Status Ring -->
+      <div class="gps-status-ring" id="gps-ring">
+        <div class="ring-bg"></div>
+        <div class="ring-progress"></div>
+        <div class="ring-inner">
+          <div class="ring-icon" id="gps-icon">📡</div>
+          <div class="ring-accuracy" id="gps-accuracy-text">—</div>
+          <div class="ring-label" id="gps-status-label">En attente</div>
+        </div>
+      </div>
+
+      <!-- Accuracy bar -->
+      <div class="gps-accuracy-bar">
+        <span style="font-size:12px;color:var(--on-surface-variant)">Précision</span>
+        <div class="bar-track">
+          <div class="bar-fill" id="gps-bar-fill" style="width:0%; background:var(--on-surface-disabled)"></div>
+        </div>
+        <span class="bar-label" id="gps-bar-label" style="color:var(--on-surface-disabled)">—</span>
+      </div>
+
+      <!-- Start/Stop buttons -->
+      <div class="gps-btn-row">
+        <button class="btn-primary" id="gps-start-btn" onclick="startGPSTracking()">
+          📍 Démarrer le GPS
+        </button>
+        <button class="btn-secondary" id="gps-stop-btn" onclick="stopGPSTracking()" style="display:none">
+          ⏹ Arrêter
+        </button>
+      </div>
+
+      <!-- Coordinate Cards (hidden until first fix) -->
+      <div id="gps-coords-container" style="display:none">
+        <!-- UTM Card -->
+        <div class="gps-coord-card">
+          <div class="coord-header">
+            <span class="coord-type">Coordonnées UTM</span>
+            <button class="copy-btn" onclick="copyGPSCoords('utm')" style="font-size:14px;background:none;border:none;color:var(--on-surface-variant);cursor:pointer;padding:6px;border-radius:6px">📋</button>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Zone</span>
+            <span class="coord-value" id="gps-utm-zone">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Easting</span>
+            <span class="coord-value" id="gps-utm-e">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Northing</span>
+            <span class="coord-value" id="gps-utm-n">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">EPSG</span>
+            <span class="epsg-chip" id="gps-utm-epsg">—</span>
+          </div>
+        </div>
+
+        <!-- Geo Card -->
+        <div class="gps-coord-card">
+          <div class="coord-header">
+            <span class="coord-type">Géographique WGS84</span>
+            <button class="copy-btn" onclick="copyGPSCoords('geo')" style="font-size:14px;background:none;border:none;color:var(--on-surface-variant);cursor:pointer;padding:6px;border-radius:6px">📋</button>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Latitude</span>
+            <span class="coord-value" id="gps-geo-lat">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Longitude</span>
+            <span class="coord-value" id="gps-geo-lon">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">DMS Lat</span>
+            <span class="coord-value" id="gps-dms-lat" style="font-size:13px">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">DMS Lon</span>
+            <span class="coord-value" id="gps-dms-lon" style="font-size:13px">—</span>
+          </div>
+        </div>
+
+        <!-- Altitude Card -->
+        <div class="gps-coord-card">
+          <div class="coord-header">
+            <span class="coord-type">Altitude & Vitesse</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Altitude</span>
+            <span class="coord-value altitude" id="gps-altitude">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Précision alt.</span>
+            <span class="coord-value" id="gps-alt-accuracy" style="font-size:13px;color:var(--on-surface-variant)">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Vitesse</span>
+            <span class="coord-value" id="gps-speed" style="font-size:13px;color:var(--on-surface-variant)">—</span>
+          </div>
+          <div class="coord-row">
+            <span class="coord-label">Cap</span>
+            <span class="coord-value" id="gps-heading" style="font-size:13px;color:var(--on-surface-variant)">—</span>
+          </div>
+        </div>
+
+        <!-- Save button -->
+        <button class="btn-primary" onclick="saveGPSPoint()" style="background:var(--secondary)">
+          💾 Enregistrer ce point
+        </button>
+      </div>
+
+      <!-- Saved Points -->
+      <div class="gps-saved-header" id="gps-saved-header" style="display:none">
+        <span class="saved-title">Points enregistrés</span>
+        <span class="saved-count" id="gps-saved-count">0</span>
+      </div>
+      <div id="gps-saved-list"></div>
+    </div>
+  </div>
+
+  <!-- ======== HISTORY ======== -->
+  <div id="screen-history" class="screen">
+    <div class="app-bar">
+      <button class="back-btn" onclick="navigateTo('dashboard')">← Retour</button>
+      <h2>Historique</h2>
+      <button class="back-btn" onclick="clearHistory()">🗑</button>
+    </div>
+    <div style="padding:20px;" id="history-list"></div>
+  </div>
+
+  <!-- ======== SETTINGS ======== -->
+  <div id="screen-settings" class="screen">
+    <div class="app-bar">
+      <button class="back-btn" onclick="navigateTo('dashboard')">← Retour</button>
+      <h2>Paramètres</h2>
+      <div></div>
+    </div>
+    <div style="padding:20px;">
+      <div class="settings-section">
+        <div class="section-title">Coordonnées</div>
+        <div class="setting-item">
+          <span class="setting-label">Système par défaut</span>
+          <span class="setting-value">WGS84</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Précision décimale</span>
+          <span class="setting-value">8 décimales</span>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="section-title">GPS</div>
+        <div class="setting-item">
+          <span class="setting-label">Seuil de précision</span>
+          <span class="setting-value">5 m</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Unité de distance</span>
+          <span class="setting-value">Mètres</span>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="section-title">Apparence</div>
+        <div class="setting-item">
+          <span class="setting-label">Thème sombre</span>
+          <span class="setting-value">✓ Activé</span>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="section-title">À propos</div>
+        <div class="setting-item">
+          <span class="setting-label">Version</span>
+          <span class="setting-value">1.0.0 (Build 1)</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Application</span>
+          <span class="setting-value">TopoMobile Pro</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Moteur UTM</span>
+          <span class="setting-value">Karney-Krüger 6ème ordre</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Add Point Dialog (overlay) -->
+<div id="add-point-dialog" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center;">
+  <div style="background:var(--surface-elevated); border-radius:20px; padding:24px; width:90%; max-width:400px; border:1px solid var(--border);">
+    <h3 style="margin-bottom:16px; font-size:18px;">Ajouter un point</h3>
+    <div class="form-group">
+      <label>Nom du point</label>
+      <input type="text" id="pt-name" placeholder="P1">
+    </div>
+    <div class="form-group">
+      <label>Easting (m)</label>
+      <input type="number" id="pt-easting" placeholder="500000.000" step="any">
+    </div>
+    <div class="form-group">
+      <label>Northing (m)</label>
+      <input type="number" id="pt-northing" placeholder="5400000.000" step="any">
+    </div>
+    <div style="display:flex; gap:12px; margin-top:16px;">
+      <button class="btn-secondary" onclick="closeAddPointDialog()" style="flex:1">Annuler</button>
+      <button class="btn-primary" onclick="addPoint()" style="flex:1; margin-top:0">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ==============================================================================
+// KARNEY-KRÜGER UTM CONVERTER — 6th Order (Sub-millimeter precision)
+// ==============================================================================
+
+const WGS84 = {
+  a: 6378137.0,
+  f: 1 / 298.257223563,
+  k0: 0.9996,
+};
+WGS84.b = WGS84.a * (1 - WGS84.f);
+WGS84.e2 = 2 * WGS84.f - WGS84.f * WGS84.f;
+WGS84.e = Math.sqrt(WGS84.e2);
+WGS84.n = WGS84.f / (2 - WGS84.f);
+
+// Rectifying radius
+const n = WGS84.n, n2 = n*n, n3 = n2*n, n4 = n3*n, n5 = n4*n, n6 = n5*n;
+WGS84.A = (WGS84.a / (1 + n)) * (1 + n2/4 + n4/64 + n6/256);
+
+// Krüger alpha coefficients (forward: geographic → projected)
+WGS84.alpha = [
+  (1/2)*n - (2/3)*n2 + (5/16)*n3 + (41/180)*n4 - (127/288)*n5 + (7891/37800)*n6,
+  (13/48)*n2 - (3/5)*n3 + (557/1440)*n4 + (281/630)*n5 - (1983433/1935360)*n6,
+  (61/240)*n3 - (103/140)*n4 + (15061/26880)*n5 + (167603/181440)*n6,
+  (49561/161280)*n4 - (179/168)*n5 + (6601661/7257600)*n6,
+  (34729/80640)*n5 - (3418889/1995840)*n6,
+  (212378941/319334400)*n6,
+];
+
+// Krüger beta coefficients (inverse: projected → geographic)
+WGS84.beta = [
+  (1/2)*n - (2/3)*n2 + (37/96)*n3 - (1/360)*n4 - (81/512)*n5 + (96199/604800)*n6,
+  (1/48)*n2 + (1/15)*n3 - (437/1440)*n4 + (46/105)*n5 - (1118711/3870720)*n6,
+  (17/480)*n3 - (37/840)*n4 - (209/4480)*n5 + (5569/90720)*n6,
+  (4397/161280)*n4 - (11/504)*n5 - (830251/7257600)*n6,
+  (4583/161280)*n5 - (108847/3991680)*n6,
+  (20648693/638668800)*n6,
+];
+
+function atanh(x) { return 0.5 * Math.log((1+x)/(1-x)); }
+function asinh(x) { return Math.log(x + Math.sqrt(x*x + 1)); }
+
+function latLonToUTM(lat, lon) {
+  if (lat < -90 || lat > 90) throw new Error(`Latitude hors limites : ${lat}°`);
+  if (lon < -180 || lon > 180) throw new Error(`Longitude hors limites : ${lon}°`);
+
+  const zone = Math.floor((lon + 180) / 6) + 1;
+  const hemisphere = lat >= 0 ? 'N' : 'S';
+  const lon0 = (zone - 1) * 6 - 180 + 3;
+  const deg2rad = Math.PI / 180;
+
+  const phi = lat * deg2rad;
+  const dLambda = (lon - lon0) * deg2rad;
+  const sinPhi = Math.sin(phi);
+  const tau = Math.tan(phi);
+  const tauNorm = Math.sqrt(1 + tau * tau);
+
+  const sigma = Math.sinh(WGS84.e * atanh(WGS84.e * sinPhi / tauNorm));
+  const tauP = tau * Math.sqrt(1 + sigma * sigma) - sigma * tauNorm;
+
+  const cosDL = Math.cos(dLambda);
+  const sinDL = Math.sin(dLambda);
+
+  const xiP = Math.atan2(tauP, cosDL);
+  const etaP = asinh(sinDL / Math.sqrt(tauP * tauP + cosDL * cosDL));
+
+  let xi = xiP, eta = etaP;
+  for (let j = 0; j < 6; j++) {
+    const ord = 2 * (j + 1);
+    xi  += WGS84.alpha[j] * Math.sin(ord * xiP)  * Math.cosh(ord * etaP);
+    eta += WGS84.alpha[j] * Math.cos(ord * xiP)  * Math.sinh(ord * etaP);
+  }
+
+  let easting = WGS84.k0 * WGS84.A * eta + 500000;
+  let northing = WGS84.k0 * WGS84.A * xi;
+  if (hemisphere === 'S') northing += 10000000;
+
+  const epsg = hemisphere === 'N' ? 32600 + zone : 32700 + zone;
+
+  return { zone, hemisphere, easting, northing, epsg };
+}
+
+function utmToLatLon(easting, northing, zone, hemisphere) {
+  const eta = (easting - 500000) / (WGS84.k0 * WGS84.A);
+  let xi = hemisphere === 'S'
+    ? (northing - 10000000) / (WGS84.k0 * WGS84.A)
+    : northing / (WGS84.k0 * WGS84.A);
+
+  let xiP = xi, etaP = eta;
+  for (let j = 0; j < 6; j++) {
+    const ord = 2 * (j + 1);
+    xiP  -= WGS84.beta[j] * Math.sin(ord * xi)  * Math.cosh(ord * eta);
+    etaP -= WGS84.beta[j] * Math.cos(ord * xi)  * Math.sinh(ord * eta);
+  }
+
+  const chi = Math.asin(Math.sin(xiP) / Math.cosh(etaP));
+  let phi = chi;
+  for (let i = 0; i < 10; i++) {
+    const sinPhi = Math.sin(phi);
+    const tau = Math.tan(phi);
+    const tauNorm = Math.sqrt(1 + tau * tau);
+    const sigma = Math.sinh(WGS84.e * atanh(WGS84.e * sinPhi / tauNorm));
+    const tauP = tau * Math.sqrt(1 + sigma * sigma) - sigma * tauNorm;
+    const dTau = Math.tan(chi) - tauP;
+    const dtauDphi = (1 - WGS84.e2 * sinPhi * sinPhi) * tauNorm *
+      Math.sqrt(1 + tauP * tauP) / (1 + (1 - WGS84.e2) * tau * tau);
+    const phiOld = phi;
+    phi += dTau / dtauDphi;
+    if (Math.abs(phi - phiOld) < 1e-15) break;
+  }
+
+  const lon0 = (zone - 1) * 6 - 180 + 3;
+  const lambda = lon0 + Math.atan2(Math.sinh(etaP), Math.cos(xiP)) * (180 / Math.PI);
+  const latitude = phi * (180 / Math.PI);
+
+  return { latitude, longitude: lambda };
+}
+
+// ==============================================================================
+// AREA CALCULATOR — Gauss Shoelace
+// ==============================================================================
+
+function calculateArea(points) {
+  const n = points.length;
+  if (n < 3) throw new Error('Minimum 3 points requis');
+
+  let area = 0, perimeter = 0, cx = 0, cy = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const cross = points[i].e * points[j].n - points[j].e * points[i].n;
+    area += cross;
+    cx += (points[i].e + points[j].e) * cross;
+    cy += (points[i].n + points[j].n) * cross;
+    const de = points[j].e - points[i].e;
+    const dn = points[j].n - points[i].n;
+    perimeter += Math.sqrt(de*de + dn*dn);
+  }
+  const signedArea = area / 2;
+  const absArea = Math.abs(signedArea);
+  cx /= (6 * signedArea);
+  cy /= (6 * signedArea);
+
+  return {
+    areaSqMeters: absArea,
+    areaHectares: absArea / 10000,
+    areaSqKm: absArea / 1000000,
+    perimeter,
+    centroid: { e: cx, n: cy },
+    vertices: n,
+  };
+}
+
+// ==============================================================================
+// APP STATE & NAVIGATION
+// ==============================================================================
+
+let converterMode = 'dd';
+let surfacePoints = [];
+let history = JSON.parse(localStorage.getItem('topo_history') || '[]');
+let leafletMap = null;
+
+function navigateTo(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(`screen-${screen}`).classList.add('active');
+
+  if (screen === 'map' && !leafletMap) {
+    setTimeout(initMap, 100);
+  }
+  if (screen === 'history') renderHistory();
+  if (screen === 'surface') renderSurfacePoints();
+  if (screen === 'gps') renderGPSSavedPoints();
+}
+
+// Date
+const now = new Date();
+const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+document.getElementById('current-date').textContent =
+  now.toLocaleDateString('fr-FR', options).replace(/^\w/, c => c.toUpperCase());
+
+// ==============================================================================
+// CONVERTER
+// ==============================================================================
+
+function setConverterMode(mode, btn) {
+  converterMode = mode;
+  document.querySelectorAll('.segment-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('form-dd').style.display = mode === 'dd' ? 'block' : 'none';
+  document.getElementById('form-dms').style.display = mode === 'dms' ? 'block' : 'none';
+  document.getElementById('form-utm').style.display = mode === 'utm' ? 'block' : 'none';
+  document.getElementById('converter-result').innerHTML = '';
+  document.getElementById('converter-error').innerHTML = '';
+}
+
+function setHemi(btn, value, hiddenId) {
+  const parent = btn.parentElement;
+  parent.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(hiddenId).value = value;
+}
+
+function convert() {
+  const errDiv = document.getElementById('converter-error');
+  const resDiv = document.getElementById('converter-result');
+  errDiv.innerHTML = '';
+  resDiv.innerHTML = '';
+
+  try {
+    let result, inputDesc;
+
+    if (converterMode === 'dd') {
+      const lat = parseFloat(document.getElementById('dd-lat').value);
+      const lon = parseFloat(document.getElementById('dd-lon').value);
+      if (isNaN(lat) || isNaN(lon)) throw new Error('Veuillez saisir des coordonnées valides.');
+      result = latLonToUTM(lat, lon);
+      result.type = 'toUTM';
+      inputDesc = `${lat.toFixed(6)}°, ${lon.toFixed(6)}°`;
+    } else if (converterMode === 'dms') {
+      const d1 = parseInt(document.getElementById('dms-lat-d').value) || 0;
+      const m1 = parseInt(document.getElementById('dms-lat-m').value) || 0;
+      const s1 = parseFloat(document.getElementById('dms-lat-s').value) || 0;
+      const h1 = document.getElementById('dms-lat-h').value;
+      const d2 = parseInt(document.getElementById('dms-lon-d').value) || 0;
+      const m2 = parseInt(document.getElementById('dms-lon-m').value) || 0;
+      const s2 = parseFloat(document.getElementById('dms-lon-s').value) || 0;
+      const h2 = document.getElementById('dms-lon-h').value;
+      let lat = d1 + m1/60 + s1/3600; if (h1==='S') lat = -lat;
+      let lon = d2 + m2/60 + s2/3600; if (h2==='W') lon = -lon;
+      result = latLonToUTM(lat, lon);
+      result.type = 'toUTM';
+      inputDesc = `${d1}°${m1}'${s1.toFixed(2)}"${h1}, ${d2}°${m2}'${s2.toFixed(2)}"${h2}`;
+    } else {
+      const e = parseFloat(document.getElementById('utm-e').value);
+      const nn = parseFloat(document.getElementById('utm-n').value);
+      const z = parseInt(document.getElementById('utm-z').value);
+      const h = document.getElementById('utm-h').value;
+      if (isNaN(e) || isNaN(nn) || isNaN(z)) throw new Error('Veuillez saisir des coordonnées UTM valides.');
+      if (z < 1 || z > 60) throw new Error('Zone UTM invalide. Plage : 1-60.');
+      result = utmToLatLon(e, nn, z, h);
+      result.type = 'toLatLon';
+      inputDesc = `E:${e.toFixed(3)}, N:${nn.toFixed(3)}, Zone ${z}${h}`;
+    }
+
+    // Save to history
+    history.unshift({
+      id: Date.now(),
+      time: new Date().toISOString(),
+      mode: converterMode,
+      type: result.type,
+      input: inputDesc,
+      result: { ...result },
+    });
+    if (history.length > 100) history = history.slice(0, 100);
+    localStorage.setItem('topo_history', JSON.stringify(history));
+
+    // Render result
+    if (result.type === 'toUTM') {
+      resDiv.innerHTML = `
+        <div class="result-panel">
+          <div class="result-header"><span class="check">✓</span><h3>Coordonnées UTM</h3></div>
+          ${resultRow('Zone', `${result.zone}${result.hemisphere}`)}
+          ${resultRow('Easting', `${formatUTM(result.easting)} m`)}
+          ${resultRow('Northing', `${formatUTM(result.northing)} m`)}
+          <div class="result-row">
+            <span class="label">EPSG</span>
+            <span class="epsg-chip">EPSG:${result.epsg}</span>
+          </div>
+        </div>`;
+    } else {
+      resDiv.innerHTML = `
+        <div class="result-panel">
+          <div class="result-header"><span class="check">✓</span><h3>Coordonnées Géographiques</h3></div>
+          ${resultRow('Latitude', `${result.latitude.toFixed(8)}°`)}
+          ${resultRow('Longitude', `${result.longitude.toFixed(8)}°`)}
+        </div>`;
+    }
+  } catch (e) {
+    errDiv.innerHTML = `<div class="error-banner">
+      <svg viewBox="0 0 24 24"><path d="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10-4.48 10-10S17.52,2 12,2zm1,15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <span>${e.message}</span>
+    </div>`;
+  }
+}
+
+function resultRow(label, value) {
+  return `<div class="result-row">
+    <span class="label">${label}</span>
+    <div class="value-wrap">
+      <span class="value">${value}</span>
+      <button class="copy-btn" onclick="copyValue('${value.replace(/'/g, "\\'")}')">📋</button>
+    </div>
+  </div>`;
+}
+
+function formatUTM(v) {
+  const parts = v.toFixed(3).split('.');
+  const int = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return int + '.' + parts[1];
+}
+
+function resetConverter() {
+  document.querySelectorAll('#screen-converter input').forEach(i => i.value = '');
+  document.getElementById('converter-result').innerHTML = '';
+  document.getElementById('converter-error').innerHTML = '';
+}
+
+function copyValue(text) {
+  navigator.clipboard.writeText(text.replace(/\s/g, '')).then(() => showToast('Copié !'));
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+// ==============================================================================
+// SURFACE
+// ==============================================================================
+
+function showAddPointDialog() {
+  const d = document.getElementById('add-point-dialog');
+  d.style.display = 'flex';
+  document.getElementById('pt-name').value = `P${surfacePoints.length + 1}`;
+  document.getElementById('pt-easting').value = '';
+  document.getElementById('pt-northing').value = '';
+}
+
+function closeAddPointDialog() {
+  document.getElementById('add-point-dialog').style.display = 'none';
+}
+
+function addPoint() {
+  const name = document.getElementById('pt-name').value || `P${surfacePoints.length + 1}`;
+  const e = parseFloat(document.getElementById('pt-easting').value);
+  const nn = parseFloat(document.getElementById('pt-northing').value);
+  if (isNaN(e) || isNaN(nn)) { showToast('Coordonnées invalides'); return; }
+  surfacePoints.push({ name, e, n: nn });
+  closeAddPointDialog();
+  renderSurfacePoints();
+}
+
+function removePoint(i) {
+  surfacePoints.splice(i, 1);
+  renderSurfacePoints();
+}
+
+function clearSurfacePoints() {
+  surfacePoints = [];
+  document.getElementById('csv-file-info').innerHTML = '';
+  document.getElementById('csv-file-input').value = '';
+  renderSurfacePoints();
+}
+
+// ==============================================================================
+// CSV IMPORT
+// ==============================================================================
+
+// Drag & drop setup
+(function initDragDrop() {
+  setTimeout(() => {
+    const zone = document.getElementById('csv-drop-zone');
+    if (!zone) return;
+    ['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.add('dragover');
+    }));
+    ['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      zone.classList.remove('dragover');
+    }));
+    zone.addEventListener('drop', e => {
+      const file = e.dataTransfer.files[0];
+      if (file) handleCSVFile(file);
+    });
+  }, 500);
+})();
+
+function handleCSVFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    parseAndImportCSV(text, file.name);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseAndImportCSV(text, fileName) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length === 0) { showToast('Fichier vide'); return; }
+
+  // Detect separator: semicolon, comma, or tab
+  const firstDataLine = lines.find(l => !l.startsWith('#') && !/^(nom|name|point|id)/i.test(l.trim())) || lines[0];
+  let sep = ';';
+  if (firstDataLine.includes(';')) sep = ';';
+  else if (firstDataLine.includes('\t')) sep = '\t';
+  else if (firstDataLine.includes(',')) sep = ',';
+
+  // Check if first line is a header
+  const headerTest = lines[0].toLowerCase();
+  const hasHeader = /^(nom|name|point|id|easting|northing|x|y|e|n|#)/i.test(headerTest.trim());
+  const startIdx = hasHeader ? 1 : 0;
+
+  // Parse points with animated real-time preview
+  const parsedPoints = [];
+  let errors = 0;
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const parts = line.split(sep).map(s => s.trim());
+    let name, easting, northing;
+
+    if (parts.length >= 3) {
+      // Try: Name, E, N
+      const e1 = parseFloat(parts[1]);
+      const n1 = parseFloat(parts[2]);
+      const e0 = parseFloat(parts[0]);
+      const n0 = parseFloat(parts[1]);
+
+      if (!isNaN(e1) && !isNaN(n1) && isNaN(parseFloat(parts[0]))) {
+        // Format: Name;E;N
+        name = parts[0];
+        easting = e1;
+        northing = n1;
+      } else if (!isNaN(e0) && !isNaN(n0)) {
+        // Format: E;N;Name
+        easting = e0;
+        northing = n0;
+        name = parts[2] || `P${parsedPoints.length + 1}`;
+      } else {
+        errors++;
+        continue;
+      }
+    } else if (parts.length === 2) {
+      // Format: E;N
+      easting = parseFloat(parts[0]);
+      northing = parseFloat(parts[1]);
+      name = `P${parsedPoints.length + 1}`;
+      if (isNaN(easting) || isNaN(northing)) { errors++; continue; }
+    } else {
+      errors++;
+      continue;
+    }
+
+    if (isNaN(easting) || isNaN(northing)) { errors++; continue; }
+    parsedPoints.push({ name, e: easting, n: northing });
+  }
+
+  if (parsedPoints.length === 0) {
+    showToast('Aucun point valide trouvé dans le fichier');
+    return;
+  }
+
+  // Show file info
+  document.getElementById('csv-file-info').innerHTML = `
+    <div class="csv-file-info">
+      <span>📄</span>
+      <span class="file-name">${fileName || 'fichier.csv'}</span>
+      ${errors > 0 ? `<span style="color:var(--warning);font-size:12px">${errors} ligne(s) ignorée(s)</span>` : ''}
+      <span class="file-count">${parsedPoints.length} pts</span>
+    </div>`;
+
+  // Animated import: add points one by one with real-time preview
+  surfacePoints = [];
+  const liveBadge = document.getElementById('live-badge');
+  liveBadge.style.display = 'inline-flex';
+
+  let idx = 0;
+  const delay = Math.max(30, Math.min(150, 2000 / parsedPoints.length)); // adaptive speed
+
+  function addNextPoint() {
+    if (idx >= parsedPoints.length) {
+      // Done — final render
+      liveBadge.style.display = 'none';
+      renderSurfacePoints();
+      showToast(`${parsedPoints.length} points importés avec succès`);
+      return;
+    }
+    surfacePoints.push(parsedPoints[idx]);
+    idx++;
+    drawPolygonLive(surfacePoints); // Real-time canvas update
+    updatePointsCounter();
+    requestAnimationFrame(() => setTimeout(addNextPoint, delay));
+  }
+
+  addNextPoint();
+}
+
+function loadSampleCSV() {
+  const sample = `Nom;Easting;Northing
+A;500000.000;5400000.000
+B;500120.500;5400000.000
+C;500150.000;5400080.750
+D;500100.000;5400150.200
+E;500020.000;5400120.000
+F;499980.000;5400060.500`;
+
+  parseAndImportCSV(sample, 'exemple_parcelle.csv');
+}
+
+function updatePointsCounter() {
+  const header = document.getElementById('points-header');
+  const count = document.getElementById('points-count');
+  if (surfacePoints.length > 0) {
+    header.style.display = 'flex';
+    count.textContent = `${surfacePoints.length} point${surfacePoints.length > 1 ? 's' : ''}`;
+  } else {
+    header.style.display = 'none';
+  }
+}
+
+// ==============================================================================
+// SURFACE RENDERING
+// ==============================================================================
+
+function renderSurfacePoints() {
+  const container = document.getElementById('surface-points');
+  const resDiv = document.getElementById('surface-result');
+
+  updatePointsCounter();
+
+  if (surfacePoints.length === 0) {
+    container.innerHTML = '';
+    resDiv.innerHTML = '';
+    drawPolygonLive([]);
+    return;
+  }
+
+  container.innerHTML = surfacePoints.map((p, i) =>
+    `<div class="point-card">
+      <div class="point-num">${i + 1}</div>
+      <div class="point-info">
+        <div class="point-name">${p.name}</div>
+        <div class="point-coords">E: ${formatUTM(p.e)}  N: ${formatUTM(p.n)}</div>
+      </div>
+      <button class="delete-btn" onclick="removePoint(${i})">✕</button>
+    </div>`
+  ).join('');
+
+  if (surfacePoints.length >= 3) {
+    try {
+      const result = calculateArea(surfacePoints);
+      resDiv.innerHTML = `
+        <div class="result-panel" style="margin-top:20px">
+          <div class="result-header"><span class="check">✓</span><h3>Résultats</h3></div>
+          ${resultRow('Surface', `${result.areaSqMeters.toFixed(2)} m²`)}
+          ${resultRow('Surface', `${result.areaHectares.toFixed(4)} ha`)}
+          ${resultRow('Surface', `${result.areaSqKm.toFixed(6)} km²`)}
+          ${resultRow('Périmètre', `${result.perimeter.toFixed(3)} m`)}
+          ${resultRow('Sommets', `${result.vertices}`)}
+          ${resultRow('Centroïde', `E: ${formatUTM(result.centroid.e)}  N: ${formatUTM(result.centroid.n)}`)}
+        </div>`;
+
+      drawPolygonLive(surfacePoints, result.centroid);
+    } catch (e) {
+      resDiv.innerHTML = `<div class="error-banner" style="margin-top:16px">
+        <svg viewBox="0 0 24 24"><path d="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10-4.48 10-10S17.52,2 12,2zm1,15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span>${e.message}</span>
+      </div>`;
+    }
+  } else {
+    resDiv.innerHTML = '';
+    drawPolygonLive(surfacePoints);
+  }
+}
+
+// ==============================================================================
+// LIVE POLYGON RENDERER
+// ==============================================================================
+
+function drawPolygonLive(points, centroid) {
+  const canvas = document.getElementById('polygon-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth;
+  const h = canvas.offsetHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  // Empty state
+  if (!points || points.length === 0) {
+    ctx.fillStyle = 'rgba(148,163,184,0.3)';
+    ctx.font = '14px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Importez des points pour voir l\'aperçu', w/2, h/2 - 8);
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(148,163,184,0.2)';
+    ctx.fillText('CSV · Manuel · GPS', w/2, h/2 + 14);
+    return;
+  }
+
+  // Calculate bounds
+  let minE = Infinity, maxE = -Infinity, minN = Infinity, maxN = -Infinity;
+  points.forEach(p => {
+    minE = Math.min(minE, p.e); maxE = Math.max(maxE, p.e);
+    minN = Math.min(minN, p.n); maxN = Math.max(maxN, p.n);
+  });
+
+  const pad = 45;
+  const rE = maxE - minE || 1, rN = maxN - minN || 1;
+  const sc = Math.min((w - 2*pad) / rE, (h - 2*pad) / rN);
+  const offsetX = (w - rE * sc) / 2;
+  const offsetY = (h - rN * sc) / 2;
+  const toX = e => offsetX + (e - minE) * sc;
+  const toY = nn => h - offsetY - (nn - minN) * sc;
+
+  // Grid with labels
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const y = offsetY + (h - 2*offsetY) * i / 5;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    const x = offsetX + (w - 2*offsetX) * i / 5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+
+  if (points.length >= 3) {
+    // Filled polygon
+    ctx.beginPath();
+    ctx.moveTo(toX(points[0].e), toY(points[0].n));
+    points.forEach(p => ctx.lineTo(toX(p.e), toY(p.n)));
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(30,136,229,0.12)';
+    ctx.fill();
+
+    // Polygon outline with glow
+    ctx.shadowColor = 'rgba(30,136,229,0.3)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#1E88E5';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  } else if (points.length === 2) {
+    // Line between 2 points
+    ctx.beginPath();
+    ctx.moveTo(toX(points[0].e), toY(points[0].n));
+    ctx.lineTo(toX(points[1].e), toY(points[1].n));
+    ctx.strokeStyle = 'rgba(30,136,229,0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Edge lengths (if <= 20 points and >= 2)
+  if (points.length >= 2 && points.length <= 20) {
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillStyle = 'rgba(148,163,184,0.6)';
+    ctx.textAlign = 'center';
+    const nn = points.length;
+    for (let i = 0; i < nn; i++) {
+      const j = (i + 1) % nn;
+      if (points.length < 3 && j === 0 && i > 0) continue;
+      const mx = (toX(points[i].e) + toX(points[j].e)) / 2;
+      const my = (toY(points[i].n) + toY(points[j].n)) / 2;
+      const de = points[j].e - points[i].e;
+      const dn = points[j].n - points[i].n;
+      const dist = Math.sqrt(de*de + dn*dn);
+      const label = dist >= 1000 ? (dist/1000).toFixed(2) + ' km' : dist.toFixed(1) + ' m';
+      ctx.fillText(label, mx, my - 6);
+    }
+  }
+
+  // Vertices with labels
+  const showLabels = points.length <= 30;
+  points.forEach((p, i) => {
+    const px = toX(p.e), py = toY(p.n);
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.arc(px, py, 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,191,165,0.15)';
+    ctx.fill();
+
+    // Vertex dot
+    ctx.beginPath();
+    ctx.arc(px, py, 5, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 ? '#FF6D00' : '#00BFA5'; // First point orange
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Label
+    if (showLabels) {
+      ctx.font = '11px Inter, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.textAlign = 'left';
+      ctx.fillText(p.name, px + 10, py - 4);
+    }
+  });
+
+  // Centroid crosshair
+  if (centroid) {
+    const cx = toX(centroid.e), cy = toY(centroid.n);
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx-12, cy); ctx.lineTo(cx+12, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy-12); ctx.lineTo(cx, cy+12); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Centroid diamond
+    ctx.fillStyle = 'rgba(255,183,77,0.8)';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy-4); ctx.lineTo(cx+4, cy); ctx.lineTo(cx, cy+4); ctx.lineTo(cx-4, cy);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // Point count badge on canvas
+  ctx.fillStyle = 'rgba(10,25,41,0.7)';
+  const badgeW = 90, badgeH = 22, badgeR = 6;
+  const bx = w - badgeW - 8, by = 8;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, badgeW, badgeH, badgeR);
+  ctx.fill();
+  ctx.font = '11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(148,163,184,0.8)';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${points.length} point${points.length > 1 ? 's' : ''}`, bx + badgeW/2, by + 15);
+}
+
+// ==============================================================================
+// MAP
+// ==============================================================================
+
+function initMap() {
+  if (leafletMap) return;
+  leafletMap = L.map('map-container').setView([20, 0], 3);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(leafletMap);
+  setTimeout(() => leafletMap.invalidateSize(), 200);
+}
+
+// ==============================================================================
+// GPS MODULE — Full real-time tracking with UTM, altitude, DMS
+// ==============================================================================
+
+let gpsWatchId = null;
+let gpsCurrentPos = null;
+let gpsSavedPoints = JSON.parse(localStorage.getItem('topo_gps_points') || '[]');
+let gpsUpdateCount = 0;
+
+function startGPSTracking() {
+  if (!navigator.geolocation) {
+    setGPSStatus('error', '📵', 'Non disponible', 'Votre appareil ne supporte pas le GPS');
+    return;
+  }
+
+  // UI: show searching state
+  setGPSStatus('searching', '📡', 'Recherche...', 'Recherche de satellites');
+  document.getElementById('gps-start-btn').style.display = 'none';
+  document.getElementById('gps-stop-btn').style.display = 'block';
+  gpsUpdateCount = 0;
+
+  // Start continuous tracking
+  gpsWatchId = navigator.geolocation.watchPosition(
+    onGPSSuccess,
+    onGPSError,
+    {
+      enableHighAccuracy: true,
+      timeout: 30000,
+      maximumAge: 0
+    }
+  );
+}
+
+function stopGPSTracking() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  setGPSStatus('', '📡', '—', 'En attente');
+  document.getElementById('gps-start-btn').style.display = 'block';
+  document.getElementById('gps-stop-btn').style.display = 'none';
+}
+
+function onGPSSuccess(pos) {
+  gpsUpdateCount++;
+  gpsCurrentPos = pos;
+
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+  const acc = pos.coords.accuracy;
+  const alt = pos.coords.altitude;
+  const altAcc = pos.coords.altitudeAccuracy;
+  const speed = pos.coords.speed;
+  const heading = pos.coords.heading;
+
+  // Status ring update — Échelle 0–1 m (topographie de précision)
+  const accCm = acc * 100; // conversion en cm
+  const accText = acc < 1 ? `±${accCm.toFixed(0)} cm` : `±${acc.toFixed(2)} m`;
+  if (acc <= 0.02) {
+    setGPSStatus('locked', '🎯', accText, 'RTK Fixe');
+  } else if (acc <= 0.05) {
+    setGPSStatus('locked', '🎯', accText, 'RTK Flottant');
+  } else if (acc <= 0.10) {
+    setGPSStatus('locked', '📍', accText, 'PPK — Excellent');
+  } else if (acc <= 0.30) {
+    setGPSStatus('locked', '📍', accText, 'DGNSS — Bon');
+  } else if (acc <= 0.50) {
+    setGPSStatus('searching', '📡', accText, 'SBAS — Moyen');
+  } else if (acc <= 1.0) {
+    setGPSStatus('searching', '📡', accText, 'Autonome');
+  } else {
+    setGPSStatus('error', '⚠️', accText, `Hors tolérance (>${(acc*100).toFixed(0)} cm)`);
+  }
+
+  // Accuracy bar
+  updateAccuracyBar(acc);
+
+  // UTM conversion
+  try {
+    const utm = latLonToUTM(lat, lon);
+    document.getElementById('gps-utm-zone').textContent = `${utm.zone}${utm.hemisphere}`;
+    document.getElementById('gps-utm-e').textContent = `${formatUTM(utm.easting)} m`;
+    document.getElementById('gps-utm-n').textContent = `${formatUTM(utm.northing)} m`;
+    document.getElementById('gps-utm-epsg').textContent = `EPSG:${utm.epsg}`;
+  } catch (e) {
+    document.getElementById('gps-utm-zone').textContent = 'Erreur';
+  }
+
+  // Geographic
+  document.getElementById('gps-geo-lat').textContent = `${lat.toFixed(8)}°`;
+  document.getElementById('gps-geo-lon').textContent = `${lon.toFixed(8)}°`;
+
+  // DMS
+  document.getElementById('gps-dms-lat').textContent = decimalToDMS(lat, true);
+  document.getElementById('gps-dms-lon').textContent = decimalToDMS(lon, false);
+
+  // Altitude & speed
+  document.getElementById('gps-altitude').textContent =
+    alt !== null ? `${alt.toFixed(2)} m` : 'Non disponible';
+  document.getElementById('gps-alt-accuracy').textContent =
+    altAcc !== null ? `±${altAcc.toFixed(1)} m` : '—';
+  document.getElementById('gps-speed').textContent =
+    speed !== null ? `${(speed * 3.6).toFixed(1)} km/h` : '—';
+  document.getElementById('gps-heading').textContent =
+    heading !== null ? `${heading.toFixed(1)}°` : '—';
+
+  // Show coords container
+  document.getElementById('gps-coords-container').style.display = 'block';
+
+  // Render saved points
+  renderGPSSavedPoints();
+}
+
+function onGPSError(err) {
+  let msg = 'Erreur GPS';
+  switch (err.code) {
+    case 1: msg = 'Permission refusée'; break;
+    case 2: msg = 'Position indisponible'; break;
+    case 3: msg = 'Délai dépassé'; break;
+  }
+  setGPSStatus('error', '❌', msg, err.message || 'Vérifiez les paramètres GPS');
+}
+
+function setGPSStatus(state, icon, accuracy, label) {
+  const ring = document.getElementById('gps-ring');
+  ring.className = 'gps-status-ring ' + state;
+  document.getElementById('gps-icon').textContent = icon;
+  document.getElementById('gps-accuracy-text').textContent = accuracy;
+  document.getElementById('gps-status-label').textContent = label;
+}
+
+function updateAccuracyBar(acc) {
+  const fill = document.getElementById('gps-bar-fill');
+  const label = document.getElementById('gps-bar-label');
+
+  // Échelle 0–1 m (0m = 100%, 1m = 0%) — Topographie de précision
+  const pct = Math.max(0, Math.min(100, (1 - Math.min(acc, 1.0)) * 100));
+  fill.style.width = pct + '%';
+
+  const accCm = acc * 100;
+  let color, text;
+  if (acc <= 0.02)      { color = '#00BFA5'; text = 'RTK Fixe'; }
+  else if (acc <= 0.05) { color = '#26A69A'; text = 'RTK Flottant'; }
+  else if (acc <= 0.10) { color = '#66BB6A'; text = 'PPK'; }
+  else if (acc <= 0.30) { color = '#29B6F6'; text = 'DGNSS'; }
+  else if (acc <= 0.50) { color = '#FFB74D'; text = 'SBAS'; }
+  else if (acc <= 1.00) { color = '#FF8A65'; text = 'Autonome'; }
+  else                  { color = '#FF5252'; text = 'Hors tolérance'; }
+
+  fill.style.background = color;
+  label.style.color = color;
+  const accDisplay = acc < 1 ? `${accCm.toFixed(0)} cm` : `${acc.toFixed(2)} m`;
+  label.textContent = `${accDisplay} — ${text}`;
+}
+
+function decimalToDMS(decimal, isLat) {
+  const h = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const abs = Math.abs(decimal);
+  const d = Math.floor(abs);
+  const mFull = (abs - d) * 60;
+  const m = Math.floor(mFull);
+  const s = (mFull - m) * 60;
+  return `${d}°${m.toString().padStart(2,'0')}'${s.toFixed(4)}"${h}`;
+}
+
+function saveGPSPoint() {
+  if (!gpsCurrentPos) { showToast('Aucune position GPS disponible'); return; }
+
+  const lat = gpsCurrentPos.coords.latitude;
+  const lon = gpsCurrentPos.coords.longitude;
+  const acc = gpsCurrentPos.coords.accuracy;
+  const alt = gpsCurrentPos.coords.altitude;
+
+  let utm;
+  try { utm = latLonToUTM(lat, lon); } catch (e) { utm = null; }
+
+  const point = {
+    id: Date.now(),
+    name: `PT${gpsSavedPoints.length + 1}`,
+    time: new Date().toISOString(),
+    lat, lon, acc, alt,
+    utm: utm ? {
+      zone: utm.zone,
+      hemisphere: utm.hemisphere,
+      easting: utm.easting,
+      northing: utm.northing,
+      epsg: utm.epsg
+    } : null
+  };
+
+  gpsSavedPoints.unshift(point);
+  localStorage.setItem('topo_gps_points', JSON.stringify(gpsSavedPoints));
+  renderGPSSavedPoints();
+  const accDisp = acc < 1 ? `${(acc*100).toFixed(0)} cm` : `${acc.toFixed(2)} m`;
+  showToast(`${point.name} enregistré (±${accDisp})`);
+}
+
+function deleteGPSPoint(id) {
+  gpsSavedPoints = gpsSavedPoints.filter(p => p.id !== id);
+  localStorage.setItem('topo_gps_points', JSON.stringify(gpsSavedPoints));
+  renderGPSSavedPoints();
+}
+
+function copyGPSCoords(type) {
+  if (!gpsCurrentPos) return;
+  const lat = gpsCurrentPos.coords.latitude;
+  const lon = gpsCurrentPos.coords.longitude;
+  let text;
+  if (type === 'utm') {
+    try {
+      const utm = latLonToUTM(lat, lon);
+      text = `Zone ${utm.zone}${utm.hemisphere} E:${utm.easting.toFixed(3)} N:${utm.northing.toFixed(3)}`;
+    } catch (e) { text = `${lat.toFixed(8)}, ${lon.toFixed(8)}`; }
+  } else {
+    text = `${lat.toFixed(8)}, ${lon.toFixed(8)}`;
+  }
+  navigator.clipboard.writeText(text).then(() => showToast('Coordonnées copiées'));
+}
+
+function renderGPSSavedPoints() {
+  const header = document.getElementById('gps-saved-header');
+  const list = document.getElementById('gps-saved-list');
+  const count = document.getElementById('gps-saved-count');
+
+  if (gpsSavedPoints.length === 0) {
+    header.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+
+  header.style.display = 'flex';
+  count.textContent = `${gpsSavedPoints.length} point${gpsSavedPoints.length > 1 ? 's' : ''}`;
+
+  list.innerHTML = gpsSavedPoints.map(p => {
+    const d = new Date(p.time);
+    const ts = d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const utmStr = p.utm
+      ? `UTM ${p.utm.zone}${p.utm.hemisphere}  E: ${formatUTM(p.utm.easting)}  N: ${formatUTM(p.utm.northing)}`
+      : `Lat: ${p.lat.toFixed(6)}°  Lon: ${p.lon.toFixed(6)}°`;
+    const altStr = p.alt !== null ? `Alt: ${p.alt.toFixed(2)} m` : '';
+    return `<div class="gps-point-card">
+      <div class="gp-header">
+        <span class="gp-name">
+          <span style="color:var(--secondary)">●</span> ${p.name}
+          <span style="font-size:11px;color:var(--on-surface-disabled);font-weight:400">±${p.acc < 1 ? (p.acc*100).toFixed(0) + ' cm' : p.acc.toFixed(2) + ' m'}</span>
+        </span>
+        <span class="gp-time">${ts}</span>
+      </div>
+      <div class="gp-coords">
+        ${utmStr}${altStr ? '<br>' + altStr : ''}
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button onclick="copyPointCoords(${p.id})" style="background:none;border:1px solid var(--border);color:var(--on-surface-variant);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer">📋 Copier</button>
+        <button onclick="deleteGPSPoint(${p.id})" style="background:none;border:1px solid var(--border);color:var(--error);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer">✕ Suppr.</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function copyPointCoords(id) {
+  const p = gpsSavedPoints.find(pt => pt.id === id);
+  if (!p) return;
+  const accDisp = p.acc < 1 ? `${(p.acc*100).toFixed(0)}cm` : `${p.acc.toFixed(2)}m`;
+  const text = p.utm
+    ? `${p.name} | UTM ${p.utm.zone}${p.utm.hemisphere} E:${p.utm.easting.toFixed(3)} N:${p.utm.northing.toFixed(3)}${p.alt !== null ? ' Alt:' + p.alt.toFixed(2) + 'm' : ''} (±${accDisp})`
+    : `${p.name} | ${p.lat.toFixed(8)}, ${p.lon.toFixed(8)}`;
+  navigator.clipboard.writeText(text).then(() => showToast(`${p.name} copié`));
+}
+
+// ==============================================================================
+// HISTORY
+// ==============================================================================
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (history.length === 0) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <p>Aucune conversion enregistrée<br><span style="color:var(--on-surface-disabled)">Vos conversions apparaîtront ici</span></p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = history.map(h => {
+    const d = new Date(h.time);
+    const ts = d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+    return `<div class="history-card">
+      <div class="hist-icon">⟷</div>
+      <div class="hist-info">
+        <div class="hist-type">${h.type === 'toUTM' ? 'DD/DMS → UTM' : 'UTM → DD'}</div>
+        <div class="hist-time">${ts} — ${h.input}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function clearHistory() {
+  if (!confirm('Supprimer tout l\'historique ?')) return;
+  history = [];
+  localStorage.removeItem('topo_history');
+  renderHistory();
+  showToast('Historique supprimé');
+}
+</script>
+</body>
+</html>
